@@ -25,3 +25,11 @@ export interface GenerationResult {
   imageUrl?: string;
   videoUrl?: string;
 }
+
+export type VideoQuality = '720p' | '1080p';
+
+export interface Feedback {
+  rating: 'up' | 'down' | null;
+  comment: string;
+  submitted: boolean;
+}
