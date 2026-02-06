@@ -1,4 +1,3 @@
-
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -8,8 +7,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AppState, UserContext, VideoQuality, Feedback } from './types';
 import { generateTextImage, generateTextVideo, generateStyleSuggestion, generateAmbientSound, classifyContext, validatePromptSafety } from './services/geminiService';
-import { getRandomStyle, fileToBase64, TYPOGRAPHY_SUGGESTIONS, createGifFromVideo } from './utils';
-import { Loader2, Paintbrush, Play, ExternalLink, Type, Sparkles, Image as ImageIcon, X, Upload, Download, FileType, Wand2, Volume2, VolumeX, ChevronLeft, ChevronRight, ArrowLeft, Video as VideoIcon, Key, Pause, Maximize, Music, Camera, Info, Copy, Check, Palette, Code, Share2, AlertTriangle, Captions, Volume1, MessageSquarePlus, ThumbsUp, ThumbsDown, Send, ShieldCheck, UserCircle, Briefcase, Globe, Monitor, Settings2, LayoutTemplate } from 'lucide-react';
+import { getRandomStyle, fileToBase64, TYPOGRAPHY_SUGGESTIONS, AUDIO_MOODS, createGifFromVideo, createAudioBufferFromPCM } from './utils';
+import { Loader2, Paintbrush, Play, ExternalLink, Type, Sparkles, Image as ImageIcon, X, Upload, Download, FileType, Wand2, Volume2, VolumeX, ChevronLeft, ChevronRight, ArrowLeft, Video as VideoIcon, Key, Pause, Maximize, Music, Camera, Info, Copy, Check, Palette, Code, Share2, AlertTriangle, Captions, Volume1, MessageSquarePlus, ThumbsUp, ThumbsDown, Send, ShieldCheck, UserCircle, Briefcase, Globe, Monitor, Settings2, LayoutTemplate, Film, FileImage, Music2, Mic } from 'lucide-react';
 
 // -- Components --
 
@@ -162,6 +161,7 @@ const App: React.FC = () => {
 
   const [inputText, setInputText] = useState<string>("");
   const [inputStyle, setInputStyle] = useState<string>("");
+  const [soundStyle, setSoundStyle] = useState<string>(""); // Empty string means "Auto"
   const [quality, setQuality] = useState<VideoQuality>('720p');
   const [showCaptions, setShowCaptions] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>({ rating: null, comment: '', submitted: false });
@@ -171,6 +171,7 @@ const App: React.FC = () => {
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
   const [embedCode, setEmbedCode] = useState<string>("");
+  const [isGifLoading, setIsGifLoading] = useState(false);
 
   const [statusMessage, setStatusMessage] = useState<string>("");
 
@@ -229,15 +230,20 @@ const App: React.FC = () => {
       const vUrl = await generateTextVideo(inputText, imgData, imgMime, styleToUse, quality);
       setVideoSrc(vUrl);
 
-      setLoadingPhase("Composing ambient audio...");
-      const audioData = await generateAmbientSound(inputText, styleToUse);
+      setLoadingPhase("Composing audio track...");
+      // Use soundStyle if selected, otherwise fallback to visual style
+      const audioPrompt = soundStyle || styleToUse;
+      const audioData = await generateAmbientSound(inputText, audioPrompt);
       
       if (audioData) {
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        audioContextRef.current = ctx;
-        const arrayBuffer = Uint8Array.from(atob(audioData), c => c.charCodeAt(0)).buffer;
-        const decoded = await ctx.decodeAudioData(arrayBuffer);
-        setAudioBuffer(decoded);
+        try {
+          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          audioContextRef.current = ctx;
+          const decoded = createAudioBufferFromPCM(ctx, audioData);
+          setAudioBuffer(decoded);
+        } catch (audioErr) {
+          console.error("Audio processing failed", audioErr);
+        }
       }
 
       setState(AppState.PLAYING);
@@ -271,6 +277,27 @@ const App: React.FC = () => {
     }
   };
 
+  const handleGifDownload = async () => {
+    if (!videoSrc) return;
+    setIsGifLoading(true);
+    try {
+        const gifBlob = await createGifFromVideo(videoSrc);
+        const url = URL.createObjectURL(gifBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `typemotion-${Date.now()}.gif`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    } catch(e) {
+        console.error(e);
+        alert("GIF creation failed. Please try again.");
+    } finally {
+        setIsGifLoading(false);
+    }
+  };
+
   const playAudio = () => {
     if (audioContextRef.current && audioBuffer) {
       if (audioSourceRef.current) audioSourceRef.current.stop();
@@ -285,33 +312,47 @@ const App: React.FC = () => {
   const LoadingView = () => (
     <div className="flex flex-col items-center justify-center h-full w-full space-y-12 animate-in fade-in zoom-in duration-500">
       <div className="relative group">
-        <div className="absolute inset-0 bg-amber-500/20 blur-[60px] rounded-full animate-pulse" />
-        <div className="relative z-10 w-24 h-24 rounded-full border border-amber-500/30 flex items-center justify-center bg-black/50 backdrop-blur-md shadow-2xl shadow-amber-900/20">
-           <Loader2 size={40} className="text-amber-500 animate-spin" />
+        <div className="absolute inset-0 bg-amber-500/20 blur-[80px] rounded-full animate-pulse" />
+        <div className="relative z-10 w-32 h-32 rounded-full border border-amber-500/30 flex items-center justify-center bg-black/50 backdrop-blur-md shadow-2xl shadow-amber-900/20">
+           {/* Animated Orbiting Ring */}
+           <div className="absolute inset-0 rounded-full border-t-2 border-r-2 border-amber-500 animate-spin opacity-50"></div>
+           <div className="absolute inset-2 rounded-full border-b-2 border-l-2 border-orange-500 animate-spin duration-3000 opacity-50"></div>
+           <Loader2 size={48} className="text-amber-500 animate-spin" />
         </div>
       </div>
       
-      <div className="text-center space-y-3 relative z-10 max-w-sm px-4">
-        <h3 className="text-2xl font-bold text-white tracking-tight font-display">{loadingPhase}</h3>
-        <p className="text-zinc-500 text-xs font-mono uppercase tracking-widest border border-zinc-800 rounded-full py-1 px-3 inline-block bg-black/40">
-           Processing on {quality === '1080p' ? 'Veo High Fidelity' : 'Veo Standard'}
+      <div className="text-center space-y-4 relative z-10 max-w-sm px-4">
+        <h3 className="text-3xl font-black text-white tracking-tighter font-display uppercase bg-clip-text text-transparent bg-gradient-to-r from-white via-zinc-200 to-zinc-500 animate-pulse">
+            {loadingPhase}
+        </h3>
+        <p className="text-zinc-500 text-xs font-mono uppercase tracking-widest border border-zinc-800 rounded-full py-1.5 px-4 inline-block bg-black/40">
+           <Sparkles size={10} className="inline mr-2 text-amber-500"/>
+           Rendering on {quality === '1080p' ? 'Veo High Fidelity' : 'Veo Standard'}
         </p>
       </div>
       
-      <div className="flex gap-3 mt-4">
+      {/* Enhanced Progress Steps */}
+      <div className="flex gap-4 mt-8">
         {[
-          { label: 'Concept', active: state === AppState.GENERATING_IMAGE || state === AppState.GENERATING_VIDEO },
-          { label: 'Motion', active: state === AppState.GENERATING_VIDEO },
-          { label: 'Sound', active: state === AppState.PLAYING }
+          { label: 'Concept', active: state === AppState.GENERATING_IMAGE || state === AppState.GENERATING_VIDEO, icon: Brain },
+          { label: 'Motion', active: state === AppState.GENERATING_VIDEO, icon: Film },
+          { label: 'Audio', active: state === AppState.PLAYING, icon: Music2 }
         ].map((s, i) => (
-          <div key={i} className="flex flex-col items-center gap-2">
-            <div className={`h-1.5 w-16 rounded-full transition-all duration-700 ${s.active ? 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-lg shadow-orange-500/20' : 'bg-zinc-800'}`} />
-            <span className={`text-[10px] font-bold uppercase tracking-wider transition-colors duration-500 ${s.active ? 'text-zinc-300' : 'text-zinc-700'}`}>{s.label}</span>
+          <div key={i} className="flex flex-col items-center gap-3 relative group">
+            {i < 2 && <div className={`absolute top-4 left-1/2 w-full h-0.5 -z-10 transition-colors duration-1000 ${s.active ? 'bg-amber-500/50' : 'bg-zinc-800'}`} style={{width: 'calc(100% + 1rem)'}} />}
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500 border-2 ${s.active ? 'bg-amber-500 border-amber-500 text-black scale-110 shadow-lg shadow-amber-500/20' : 'bg-zinc-900 border-zinc-700 text-zinc-600'}`}>
+                {s.active ? <Check size={16} strokeWidth={4} /> : <div className="w-2 h-2 rounded-full bg-zinc-700"/>}
+            </div>
+            <span className={`text-[10px] font-bold uppercase tracking-wider transition-colors duration-500 ${s.active ? 'text-amber-500' : 'text-zinc-700'}`}>{s.label}</span>
           </div>
         ))}
       </div>
     </div>
   );
+
+  // Helper for step icons
+  const Brain = (props: any) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></svg>;
+
 
   return (
     <div className="w-full h-screen bg-black text-white overflow-hidden font-sans flex flex-col selection:bg-amber-500/30 selection:text-amber-200">
@@ -409,19 +450,37 @@ const App: React.FC = () => {
                     value={inputStyle}
                     onChange={e => setInputStyle(e.target.value)}
                     placeholder="Describe the look..."
-                    className="w-full bg-zinc-900/50 border border-white/10 rounded-xl p-3 text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all"
+                    className="w-full bg-zinc-900/50 border border-white/10 rounded-xl p-3 text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all text-sm mb-3"
                   />
-                  <div className="flex flex-wrap gap-2">
-                     {['Neon Glitch', 'Liquid Metal', 'Fire & Smoke', 'Cloud Formation', 'Crystal', 'Cyberpunk'].map(s => (
+                  
+                  {/* Expanded Typography Chips */}
+                  <div className="grid grid-cols-2 gap-2 h-40 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+                     {TYPOGRAPHY_SUGGESTIONS.map(s => (
                        <button 
-                          key={s} 
-                          onClick={() => setInputStyle(s)} 
-                          className={`text-xs px-3 py-1.5 rounded-full transition-all border ${inputStyle === s ? 'bg-amber-500 text-black border-amber-500 font-bold' : 'bg-zinc-900 text-zinc-400 border-white/5 hover:border-white/20 hover:text-white'}`}
+                          key={s.id} 
+                          onClick={() => setInputStyle(s.prompt)} 
+                          className={`text-xs px-3 py-2 rounded-lg transition-all border text-left flex flex-col gap-1 ${inputStyle === s.prompt ? 'bg-amber-500 text-black border-amber-500' : 'bg-zinc-900 text-zinc-400 border-white/5 hover:border-white/20 hover:text-white hover:bg-zinc-800'}`}
                        >
-                         {s}
+                         <span className="font-bold">{s.label}</span>
                        </button>
                      ))}
                   </div>
+               </div>
+
+               {/* New Soundscape Selection */}
+               <div className="space-y-4">
+                 <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2"><Music2 size={14} className="text-amber-500"/> Soundscape</label>
+                 <div className="grid grid-cols-2 gap-2">
+                    {AUDIO_MOODS.map(m => (
+                       <button 
+                          key={m.id}
+                          onClick={() => setSoundStyle(m.prompt)}
+                          className={`text-xs px-3 py-2 rounded-lg transition-all border ${soundStyle === m.prompt ? 'bg-zinc-100 text-black border-white' : 'bg-zinc-900/50 text-zinc-500 border-white/5 hover:text-zinc-300'}`}
+                       >
+                         {m.label}
+                       </button>
+                    ))}
+                 </div>
                </div>
 
                <div className="space-y-4">
@@ -516,12 +575,22 @@ const App: React.FC = () => {
                                <div className="flex items-center gap-2 text-zinc-400 text-xs uppercase tracking-wider font-mono">
                                  <span className="bg-white/10 px-2 py-0.5 rounded text-white">{quality}</span>
                                  <span>•</span>
-                                 <span>{inputStyle || 'Auto-Style'}</span>
+                                 <span>{inputStyle ? 'Custom Style' : 'Auto-Style'}</span>
                                </div>
                             </div>
                          </div>
                          
                          <div className="flex items-center gap-3">
+                           {/* GIF Download Button */}
+                           <button 
+                             onClick={handleGifDownload}
+                             disabled={isGifLoading}
+                             className={`p-3 rounded-xl backdrop-blur-md border border-white/10 transition-all ${isGifLoading ? 'bg-amber-500 text-black animate-pulse' : 'bg-black/60 text-white hover:bg-white/10'}`}
+                             title="Download as GIF"
+                           >
+                             {isGifLoading ? <Loader2 size={20} className="animate-spin" /> : <FileImage size={20} />}
+                           </button>
+
                            <button 
                              onClick={() => setShowCaptions(!showCaptions)}
                              className={`p-3 rounded-xl backdrop-blur-md border border-white/10 transition-all ${showCaptions ? 'bg-amber-500 text-black border-amber-500' : 'bg-black/60 text-white hover:bg-white/10'}`}

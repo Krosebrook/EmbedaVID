@@ -54,6 +54,38 @@ export const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
+/**
+ * Decodes raw PCM audio data (16-bit signed integer, 24kHz default) into a Web Audio API AudioBuffer.
+ * This is required because Gemini TTS returns raw PCM without WAV/MP3 headers.
+ */
+export const createAudioBufferFromPCM = (
+  ctx: AudioContext,
+  base64Data: string,
+  sampleRate: number = 24000
+): AudioBuffer => {
+  const binaryString = atob(base64Data);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  
+  // Create Int16 view of the byte buffer (16-bit PCM)
+  const int16Array = new Int16Array(bytes.buffer);
+  
+  const numChannels = 1;
+  const frameCount = int16Array.length;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+  const channelData = buffer.getChannelData(0);
+  
+  for (let i = 0; i < frameCount; i++) {
+    // Normalize 16-bit PCM to [-1, 1] float
+    channelData[i] = int16Array[i] / 32768.0;
+  }
+  
+  return buffer;
+};
+
 export const createGifFromVideo = async (videoUrl: string): Promise<Blob> => {
   // Runtime check just in case, though standard imports should throw earlier if failed
   if (typeof GIFEncoder !== 'function') {
@@ -136,25 +168,32 @@ export const createGifFromVideo = async (videoUrl: string): Promise<Blob> => {
 };
 
 export const TYPOGRAPHY_SUGGESTIONS = [
-  { id: 'cinematic-3d', label: 'Cinematic 3D', prompt: 'Bold, dimensional 3D text with realistic lighting and shadows' },
-  { id: 'neon-cyber', label: 'Neon Cyber', prompt: 'Glowing neon tube typography, cyberpunk aesthetic, vibrant bloom' },
-  { id: 'elegant-serif', label: 'Elegant Serif', prompt: 'Refined, high-contrast serif typography, luxury editorial look' },
-  { id: 'bold-sans', label: 'Bold Sans', prompt: 'Massive, heavy sans-serif typography, geometric and impactful' },
-  { id: 'handwritten', label: 'Handwritten', prompt: 'Organic, flowing handwritten brush script, artistic and personal' },
-  { id: 'retro-80s', label: 'Retro 80s', prompt: 'Chrome-plated, synthwave style typography with horizon lines and sparkles' },
-  { id: 'liquid-metal', label: 'Liquid Metal', prompt: 'Fluid, melting chrome typography, surreal and reflective' },
-  { id: 'botanical', label: 'Botanical', prompt: 'Typography intertwined with vines, flowers, and organic nature elements' },
-  { id: 'glitch', label: 'Glitch', prompt: 'Distorted, pixelated glitch art typography with chromatic aberration' },
-  { id: 'surrealist', label: 'Surrealist', prompt: 'Dreamlike surrealist typography, melting clocks, floating objects, Salvador Dali style' },
-  { id: 'retro-futurism', label: 'Retro Futurism', prompt: '50s sci-fi aesthetic, chrome curves, atomic age symbols, flying cars vibe' },
-  { id: 'art-deco', label: 'Art Deco', prompt: 'Luxurious 1920s Gatsby style, gold geometric patterns, black marble, symmetrical' },
-  { id: 'abstract-exp', label: 'Abstract Exp.', prompt: 'Chaotic splashes of paint, emotional strokes, Pollock style, vibrant texture' },
-  { id: 'pop-art', label: 'Pop Art', prompt: 'Comic book style, halftone dots, bold black outlines, primary colors, Lichtenstein vibe' },
-  { id: 'noir', label: 'Noir', prompt: 'High contrast black and white, dramatic shadows, rain-slicked streets, detective mystery' },
-  { id: 'paper-cutout', label: 'Paper Cutout', prompt: 'Layered colored paper construction, depth shadows, craft aesthetic' },
-  { id: 'low-poly', label: 'Low Poly', prompt: 'Faceted geometric shapes, digital polygon mesh, vivid flat shading' },
-  { id: 'watercolor', label: 'Watercolor', prompt: 'Soft bleeding watercolor paints, paper texture, gentle gradients, artistic' },
-  { id: 'claymation', label: 'Claymation', prompt: 'Hand-sculpted plasticine texture, fingerprints, stop-motion look' },
-  { id: 'blueprint', label: 'Blueprint', prompt: 'Technical architectural drawing, white lines on blue grid, construction measurements' },
-  { id: 'matrix', label: 'Matrix Code', prompt: 'Falling green digital code rain forming the typography, cyberpunk hacker aesthetic' }
+  { id: 'cinematic-3d', label: 'Cinematic 3D', prompt: 'Bold, dimensional 3D text with realistic lighting and shadows, movie poster quality' },
+  { id: 'neon-cyber', label: 'Neon Cyber', prompt: 'Glowing neon tube typography, cyberpunk aesthetic, vibrant bloom, rainy street reflection' },
+  { id: 'liquid-metal', label: 'Liquid Metal', prompt: 'Fluid, melting chrome typography, surreal and reflective, mercury texture' },
+  { id: 'retro-80s', label: 'Retro 80s', prompt: 'Chrome-plated, synthwave style typography with horizon lines, lasers, and sparkles' },
+  { id: 'handwritten', label: 'Handwritten', prompt: 'Organic, flowing handwritten brush script, artistic ink splatter, personal touch' },
+  { id: 'fire-smoke', label: 'Fire & Smoke', prompt: 'Typography formed from swirling fire and thick colorful smoke, dynamic and energetic' },
+  { id: 'ice-crystal', label: 'Ice Crystal', prompt: 'Carved into a massive glacier of translucent blue ice, frost particles, cold atmosphere' },
+  { id: 'botanical', label: 'Botanical', prompt: 'Typography intertwined with vines, flowers, and organic nature elements, forest setting' },
+  { id: 'glitch-art', label: 'Glitch Art', prompt: 'Distorted, pixelated glitch art typography with chromatic aberration, data corruption' },
+  { id: 'gold-lux', label: 'Gold Luxury', prompt: 'Solid gold typography with diamond inlays, luxurious studio lighting, caustic reflections' },
+  { id: 'cloud-sky', label: 'Cloud Form', prompt: 'Formed by fluffy white clouds in a deep blue summer sky, soft and airy' },
+  { id: 'lego-brick', label: 'Plastic Brick', prompt: 'Constructed from colorful plastic building blocks, playful and toy-like' },
+  { id: 'paper-craft', label: 'Paper Craft', prompt: 'Layered colored paper construction, depth shadows, origami aesthetic' },
+  { id: 'noir-detective', label: 'Film Noir', prompt: 'High contrast black and white, dramatic venetian blind shadows, mystery' },
+  { id: 'candy-pop', label: 'Candy Pop', prompt: 'Glossy, sugary texture, vibrant pastel colors, sprinkles and lollipop aesthetic' },
+  { id: 'stone-carved', label: 'Ancient Stone', prompt: 'Carved into an ancient mossy stone tablet, weathered texture, mystical lighting' },
+  { id: 'matrix-code', label: 'Matrix Code', prompt: 'Falling green digital code rain forming the typography, hacker aesthetic' },
+  { id: 'watercolor', label: 'Watercolor', prompt: 'Soft bleeding watercolor paints on textured paper, gentle artistic gradients' }
+];
+
+export const AUDIO_MOODS = [
+  { id: 'auto', label: 'Auto-Match Video', prompt: '' },
+  { id: 'cinematic', label: 'Epic Cinematic', prompt: 'Epic, orchestral, dramatic score with deep bass' },
+  { id: 'lofi', label: 'Chill / Lo-Fi', prompt: 'Relaxing, low fidelity beats, soft jazz chords, vinyl crackle' },
+  { id: 'synthwave', label: 'Synthwave', prompt: 'Retro 80s synthesizers, pulsing bassline, futuristic' },
+  { id: 'nature', label: 'Nature Ambience', prompt: 'Peaceful nature sounds, birds chirping, wind, flowing water' },
+  { id: 'dark', label: 'Dark / Horror', prompt: 'Eerie, unsettling industrial drone, suspenseful atmosphere' },
+  { id: 'upbeat', label: 'Upbeat Pop', prompt: 'Cheerful, energetic, happy melody, catchy rhythm' }
 ];
