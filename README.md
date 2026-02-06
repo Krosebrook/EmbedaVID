@@ -1,11 +1,24 @@
-<div align="center">
+# Type Motion
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+Generate cinematic 3D animations from simple text using Gemini and Veo 3.1.
 
-  <h1>Built with AI Studio</h2>
+## TL;DR
+High-end AI media generator built with React 19, Tailwind CSS, and Google GenAI SDK. Production-grade PWA with offline caching.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## Setup
+1. Local Environment: Access `process.env.API_KEY`.
+2. Serves via native ESM; no build step required for local dev.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## Env Vars
+- `API_KEY`: Google Gemini API Key (Required).
 
-</div>
+## Build & Deploy
+- Standard static hosting (Vercel, Netlify, Cloudflare).
+- Ensure HTTPS for Service Worker functionality.
+
+## Documentation
+- [PWA Strategy](./PWA.md)
+- [Security Guidelines](./SECURITY.md)
+- [Deployment Guide](./DEPLOYMENT.md)
+- [Testing Matrix](./TESTING.md)
+- [Observability](./OBSERVABILITY.md)
